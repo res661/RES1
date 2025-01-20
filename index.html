@@ -239,6 +239,23 @@
             transform: scale(1.1);
         }
 
+        .sort-options {
+            margin: 20px 0;
+        }
+
+        .sort-options select {
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            background: #2575fc;
+            color: white;
+            cursor: pointer;
+        }
+
+        .sort-options select:hover {
+            background: #6a11cb;
+        }
+
         @media (max-width: 768px) {
             .chart-container {
                 height: 40vh;
@@ -267,12 +284,19 @@
             <button onclick="openModal()">Добавить транзакцию</button>
             <button onclick="clearData()">Очистить данные</button>
             <button onclick="downloadData()">Скачать данные</button>
-            <button onclick="sortByDate()">Сортировать по дате</button>
         </div>
         <div class="interval-selector">
             <button onclick="setInterval('week')">Неделя</button>
             <button onclick="setInterval('month')">Месяц</button>
             <button onclick="setInterval('all')">Всё время</button>
+        </div>
+        <div class="sort-options">
+            <select onchange="sortTransactions(this.value)">
+                <option value="dateDesc">По дате (новые → старые)</option>
+                <option value="dateAsc">По дате (старые → новые)</option>
+                <option value="amountAsc">По сумме (меньше → больше)</option>
+                <option value="amountDesc">По сумме (больше → меньше)</option>
+            </select>
         </div>
         <div class="stats">
             <div><span>Доход:</span> <span id="totalIncome">$0.00</span></div>
@@ -292,6 +316,16 @@
             </select>
             <input type="text" id="description" placeholder="Описание">
             <input type="date" id="date" value="${new Date().toISOString().split('T')[0]}">
+            <h3>Расширенные данные</h3>
+            <input type="text" id="theme" placeholder="Тема">
+            <input type="number" id="purchasePrice" placeholder="Цена покупки">
+            <input type="number" id="salePrice" placeholder="Цена продажи">
+            <select id="commission">
+                <option value="2">2%</option>
+                <option value="5">5%</option>
+                <option value="10">10%</option>
+                <option value="15">15%</option>
+            </select>
             <button onclick="saveTransaction()">Сохранить</button>
         </div>
     </div>
@@ -352,7 +386,7 @@
             const transactionsDiv = document.getElementById('transactions');
             transactionsDiv.innerHTML = filteredTransactions.map((t, i) => `
                 <div class="transaction">
-                    <span>${t.type === 'income' ? '+' : '-'}$${Math.abs(t.amount).toFixed(2)} - ${t.description} (${t.date})</span>
+                    <span>${t.type === 'income' ? '+' : '-'}$${Math.abs(t.amount).toFixed(2)} - ${t.description} (${formatDate(t.date)})</span>
                     <button onclick="deleteTransaction(${i})">Удалить</button>
                 </div>
             `).join('');
@@ -371,12 +405,25 @@
             const type = document.getElementById('type').value;
             const description = document.getElementById('description').value;
             const date = document.getElementById('date').value;
+            const theme = document.getElementById('theme').value;
+            const purchasePrice = parseFloat(document.getElementById('purchasePrice').value);
+            const salePrice = parseFloat(document.getElementById('salePrice').value);
+            const commission = parseFloat(document.getElementById('commission').value);
 
-            if (amount && description) {
+            let finalAmount = amount;
+            let finalDescription = description;
+
+            if (theme && purchasePrice && salePrice) {
+                const profit = (salePrice - purchasePrice) - (salePrice * commission / 100);
+                finalAmount = profit;
+                finalDescription = `${profit >= 0 ? '$' + profit.toFixed(2) + ' прибыль' : '-$' + Math.abs(profit).toFixed(2) + ' убыток'} (тема: ${theme})`;
+            }
+
+            if (finalAmount && finalDescription) {
                 transactions.push({
-                    amount: type === 'income' ? amount : -amount,
+                    amount: type === 'income' ? finalAmount : -finalAmount,
                     type,
-                    description,
+                    description: finalDescription,
                     date
                 });
                 localStorage.setItem('transactions', JSON.stringify(transactions));
@@ -387,6 +434,9 @@
                 closeModal();
                 document.getElementById('amount').value = '';
                 document.getElementById('description').value = '';
+                document.getElementById('theme').value = '';
+                document.getElementById('purchasePrice').value = '';
+                document.getElementById('salePrice').value = '';
             }
         }
 
@@ -425,8 +475,21 @@
             URL.revokeObjectURL(url);
         }
 
-        function sortByDate() {
-            transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+        function sortTransactions(sortType) {
+            switch (sortType) {
+                case 'dateDesc':
+                    transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+                    break;
+                case 'dateAsc':
+                    transactions.sort((a, b) => new Date(a.date) - new Date(b.date));
+                    break;
+                case 'amountAsc':
+                    transactions.sort((a, b) => a.amount - b.amount);
+                    break;
+                case 'amountDesc':
+                    transactions.sort((a, b) => b.amount - a.amount);
+                    break;
+            }
             updateTransactions();
         }
 
@@ -462,6 +525,12 @@
                 default:
                     return transactions;
             }
+        }
+
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const days = ['Воскресенье', 'Понедельник', 'Вторник', 'Среда', 'Четверг', 'Пятница', 'Суббота'];
+            return `${date.toLocaleDateString()} (${days[date.getDay()]})`;
         }
 
         updateChart();
